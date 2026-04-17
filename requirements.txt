@@ -1,0 +1,18 @@
+# Core
+sentence-transformers>=2.7.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+pyarrow>=12.0.0
+
+# BM25 sparse retrieval
+rank-bm25>=0.2.2
+
+# FAISS for fast similarity search
+faiss-cpu>=1.7.0
+
+# Claude API for LLM reranking
+anthropic>=0.49.0
