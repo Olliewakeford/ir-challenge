@@ -151,7 +151,7 @@ irchallenge/
 scripts/
   pipeline.py                 thin CLI wrapper over irchallenge/, kept for compatibility
   embed.py                    corpus/query encoding and embedding cache
-  fusion_lib.py               RRF fusion helpers shared by the tuning scripts
+  fusion_lib.py               RRF fusion helpers (see tests/test_fusion_lib.py)
   run_bm25_sections.py             per-section BM25 signal
   run_citation_context_retriever.py  citation-context BM25 signal
   run_new_signals.py               the signals added in the 7 and 8-way fusions
@@ -165,6 +165,11 @@ scripts/
   run_llm_rerank.py                RankGPT-style listwise reranking with Claude
   run_e5_large.py                  E5-large-v2 as an extra dense retriever
   run_knn_expansion.py             k-NN graph expansion (no measurable effect)
+tests/
+  test_fusion_lib.py, test_fusion.py, test_metrics.py, test_boost.py,
+  test_filters.py, test_text.py   unit tests for the pure logic (fusion, metrics,
+                                  boosting, filtering, text normalisation); none
+                                  of it needs the course data, so it runs in CI
 submissions/
   submission_v4_boost10.zip        final Codabench submission (v4 + 10x domain boost)
   submission_v4_boost10_data.json  same submission, unzipped for inspection
@@ -189,6 +194,13 @@ python scripts/run_refusion_v4.py
 python scripts/generate_submission_v4.py --boost 10
 ```
 
+The unit tests cover the pure logic only (fusion, metrics, boosting, filtering,
+text normalisation) and don't need the course data, so they run without any of
+the above:
+
+```bash
+pytest
+```
 
 A full run (encoding all corpus/query embeddings from scratch, all 8
 retrievers, fusion, boosting) takes roughly 40–60 minutes on an M5 Pro

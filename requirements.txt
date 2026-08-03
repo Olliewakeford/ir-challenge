@@ -17,3 +17,6 @@ faiss-cpu>=1.7.0
 # Claude API for LLM reranking
 anthropic>=0.49.0
 python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.0.0
