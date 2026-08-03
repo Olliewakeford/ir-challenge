@@ -125,10 +125,31 @@ made results worse, and understanding why constrained the rest of the design.
 
 ## Layout
 
+The retrieval, fusion and boosting logic lives in `irchallenge/`, one module
+per stage. `scripts/pipeline.py` was originally a single 1,200-line file;
+it's now a thin entry point over the package, kept so the CLI (`python
+scripts/pipeline.py --stages ...`) and the other scripts' imports still work
+unchanged.
+
 ```
+irchallenge/
+  paths.py       data/results/submission directories
+  config.py      PipelineConfig, the run configuration
+  storage.py     loading and caching corpus/query/qrels/embeddings/ranked lists
+  text.py        text normalisation shared by the retrievers
+  metrics.py     Recall/Precision/MRR/NDCG/MAP and the evaluate() report
+  device.py      torch device selection (mps/cpu)
+  retrievers.py  the eight retrieval signals
+  fusion.py      weighted Reciprocal Rank Fusion
+  filters.py     the year filter (kept for reproducibility; see "what didn't work")
+  boost.py       the domain/venue boost, the pipeline's biggest single gain
+  rerank.py      cross-encoder and BGE reranking stages
+  llm_rerank.py  Claude listwise reranking
+  submission.py  assembling and zipping a Codabench submission
+  cli.py         the scripts/pipeline.py entry point
+
 scripts/
-  pipeline.py                 core retrieval + fusion + boosting stages, and the
-                              eight retrievers the table above lists
+  pipeline.py                 thin CLI wrapper over irchallenge/, kept for compatibility
   embed.py                    corpus/query encoding and embedding cache
   fusion_lib.py               RRF fusion helpers shared by the tuning scripts
   run_bm25_sections.py             per-section BM25 signal
@@ -167,6 +188,7 @@ python scripts/run_refusion_v4.py
 # Build the held-out submission (8 signals, v4 weights, 10x domain boost)
 python scripts/generate_submission_v4.py --boost 10
 ```
+
 
 A full run (encoding all corpus/query embeddings from scratch, all 8
 retrievers, fusion, boosting) takes roughly 40–60 minutes on an M5 Pro

@@ -13,24 +13,29 @@ Usage:
 """
 import argparse
 import gc
-import json
-import re
 import sys
 import time
 from pathlib import Path
-from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    PipelineConfig, DATA_DIR, RESULTS_DIR, SUBMISSIONS_DIR, CHALLENGE_DIR, EMB_DIR,
-    load_corpus, load_queries, load_qrels, load_ranked_lists, save_ranked_lists,
-    retrieve_specter2, retrieve_scincl, retrieve_minilm,
-    retrieve_bm25_ta, retrieve_bm25_ft, retrieve_bm25_sections,
-    retrieve_citation_ctx, evaluate, assemble_submission,
+from irchallenge.boost import apply_domain_venue_boost
+from irchallenge.config import PipelineConfig
+from irchallenge.fusion import weighted_rrf_fuse as fuse_rrf_weighted
+from irchallenge.metrics import evaluate
+from irchallenge.paths import CHALLENGE_DIR, DATA_DIR, EMB_DIR, RESULTS_DIR, SUBMISSIONS_DIR
+from irchallenge.retrievers import (
+    retrieve_bm25_ft,
+    retrieve_bm25_sections,
+    retrieve_bm25_ta,
+    retrieve_citation_ctx,
+    retrieve_minilm,
+    retrieve_scincl,
+    retrieve_specter2,
+    retrieve_tfidf_ft,
 )
-import numpy as np
-from tqdm.auto import tqdm
+from irchallenge.storage import load_corpus, load_qrels, load_queries, save_ranked_lists
+from irchallenge.submission import assemble_submission
 
 
 def parse_args():
@@ -40,92 +45,6 @@ def parse_args():
     parser.add_argument("--venue-boost", type=float, default=2.0, help="Venue boost factor")
     parser.add_argument("--label", default="submission_v4", help="Submission label")
     return parser.parse_args()
-
-
-def retrieve_tfidf_ft(queries_df, corpus_df, config):
-    """TF-IDF cosine similarity on full text."""
-    tag = config.query_set
-    cache_path = RESULTS_DIR / f"stage1_tfidf_ft_{tag}.json"
-    if cache_path.exists():
-        print(f"  Loading cached TF-IDF from {cache_path}")
-        return load_ranked_lists(cache_path)
-
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-
-    def clean_text(text):
-        return re.sub(r'\[\d+(?:,\s*\d+)*\]', '', str(text))
-
-    corpus_ids = corpus_df["doc_id"].tolist()
-    corpus_texts = [clean_text(row["full_text"])[:10000] for _, row in corpus_df.iterrows()]
-    query_ids = queries_df["doc_id"].tolist()
-    query_texts = [clean_text(row["full_text"])[:10000] for _, row in queries_df.iterrows()]
-
-    print("  Fitting TF-IDF vectorizer...")
-    vectorizer = TfidfVectorizer(
-        max_features=50000, min_df=2, max_df=0.95,
-        sublinear_tf=True, ngram_range=(1, 2),
-    )
-    corpus_tfidf = vectorizer.fit_transform(corpus_texts)
-    query_tfidf = vectorizer.transform(query_texts)
-
-    results = {}
-    batch_size = 10
-    for i in tqdm(range(0, len(query_ids), batch_size), desc="TF-IDF similarity"):
-        batch_queries = query_tfidf[i:i+batch_size]
-        sims = cosine_similarity(batch_queries, corpus_tfidf)
-        for j in range(sims.shape[0]):
-            qid = query_ids[i + j]
-            top_idx = sims[j].argsort()[::-1][:300]
-            results[qid] = [corpus_ids[k] for k in top_idx if corpus_ids[k] != qid][:300]
-
-    save_ranked_lists(results, cache_path)
-    return results
-
-
-def fuse_rrf_weighted(all_retrievers, weights, k_val):
-    """Weighted RRF fusion."""
-    all_qids = set()
-    for rl in all_retrievers.values():
-        all_qids.update(rl.keys())
-    fused = {}
-    for qid in all_qids:
-        scores = defaultdict(float)
-        for name, ranked_lists in all_retrievers.items():
-            w = weights.get(name, 0.0)
-            if w == 0:
-                continue
-            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
-                scores[doc_id] += w / (k_val + rank + 1)
-        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        fused[qid] = [d for d, _ in sorted_docs[:300]]
-    return fused
-
-
-def apply_domain_venue_boost(fused_results, queries_df, corpus_df, domain_boost, venue_boost):
-    """Boost same-domain and same-venue candidates."""
-    query_domains = dict(zip(queries_df["doc_id"], queries_df["domain"]))
-    corpus_domains = dict(zip(corpus_df["doc_id"], corpus_df["domain"]))
-    query_venues = dict(zip(queries_df["doc_id"], queries_df["venue"]))
-    corpus_venues = dict(zip(corpus_df["doc_id"], corpus_df["venue"]))
-
-    boosted = {}
-    for qid, ranked in fused_results.items():
-        q_domain = query_domains.get(qid, "")
-        q_venue = query_venues.get(qid, "")
-        scored = []
-        for rank, doc_id in enumerate(ranked):
-            base_score = 1.0 / (rank + 1)
-            c_domain = corpus_domains.get(doc_id, "")
-            c_venue = corpus_venues.get(doc_id, "")
-            if c_domain == q_domain and q_domain:
-                base_score *= domain_boost
-            if c_venue == q_venue and q_venue:
-                base_score *= venue_boost
-            scored.append((doc_id, base_score))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        boosted[qid] = [d for d, _ in scored[:300]]
-    return boosted
 
 
 def main():

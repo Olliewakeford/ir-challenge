@@ -18,13 +18,13 @@ import time
 from pathlib import Path
 from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    PipelineConfig, DATA_DIR, RESULTS_DIR, SUBMISSIONS_DIR, CHALLENGE_DIR,
-    load_corpus, load_queries, load_qrels, load_ranked_lists, save_ranked_lists,
-    evaluate, assemble_submission,
-)
+from irchallenge.config import PipelineConfig
+from irchallenge.metrics import evaluate
+from irchallenge.paths import CHALLENGE_DIR, DATA_DIR, RESULTS_DIR, SUBMISSIONS_DIR
+from irchallenge.storage import load_corpus, load_qrels, load_queries, load_ranked_lists, save_ranked_lists
+from irchallenge.submission import assemble_submission
 import numpy as np
 from tqdm.auto import tqdm
 

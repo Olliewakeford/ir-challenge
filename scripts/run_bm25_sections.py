@@ -2,13 +2,13 @@
 """Quick script to run BM25-Sections retrieval and cache it."""
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    PipelineConfig, DATA_DIR, RESULTS_DIR,
-    load_corpus, load_queries, load_qrels,
-    retrieve_bm25_sections, evaluate,
-)
+from irchallenge.config import PipelineConfig
+from irchallenge.metrics import evaluate
+from irchallenge.paths import DATA_DIR, RESULTS_DIR
+from irchallenge.retrievers import retrieve_bm25_sections
+from irchallenge.storage import load_corpus, load_queries, load_qrels
 
 config = PipelineConfig(query_set="public")
 corpus_df = load_corpus(DATA_DIR / "corpus.parquet")

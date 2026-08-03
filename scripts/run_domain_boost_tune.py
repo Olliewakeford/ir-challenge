@@ -3,33 +3,13 @@
 import sys
 import time
 from pathlib import Path
-from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    DATA_DIR, RESULTS_DIR,
-    load_corpus, load_queries, load_qrels, load_ranked_lists, save_ranked_lists,
-    evaluate,
-)
-
-
-def fuse_rrf(all_retrievers, weights, k_val):
-    all_qids = set()
-    for rl in all_retrievers.values():
-        all_qids.update(rl.keys())
-    fused = {}
-    for qid in all_qids:
-        scores = defaultdict(float)
-        for name, ranked_lists in all_retrievers.items():
-            w = weights.get(name, 0.0)
-            if w == 0:
-                continue
-            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
-                scores[doc_id] += w / (k_val + rank + 1)
-        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        fused[qid] = [d for d, _ in sorted_docs[:300]]
-    return fused
+from irchallenge.fusion import weighted_rrf_fuse as fuse_rrf
+from irchallenge.metrics import evaluate
+from irchallenge.paths import DATA_DIR, RESULTS_DIR
+from irchallenge.storage import load_corpus, load_qrels, load_queries, load_ranked_lists, save_ranked_lists
 
 
 def apply_domain_boost(fused_results, query_domains, corpus_domains, boost_factor):

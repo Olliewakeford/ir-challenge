@@ -21,13 +21,12 @@ import random
 import numpy as np
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    DATA_DIR, RESULTS_DIR,
-    load_corpus, load_queries, load_qrels, load_ranked_lists, save_ranked_lists,
-    evaluate, get_ta,
-)
+from irchallenge.metrics import evaluate
+from irchallenge.paths import DATA_DIR, RESULTS_DIR
+from irchallenge.storage import load_corpus, load_qrels, load_queries, load_ranked_lists, save_ranked_lists
+from irchallenge.text import get_ta
 from tqdm.auto import tqdm
 
 

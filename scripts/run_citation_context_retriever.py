@@ -22,13 +22,13 @@ import numpy as np
 from pathlib import Path
 from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pipeline import (
-    PipelineConfig, DATA_DIR, RESULTS_DIR,
-    load_corpus, load_queries, load_qrels, save_ranked_lists,
-    evaluate, get_ta, clean_citation_markers, tokenize_simple,
-)
+from irchallenge.config import PipelineConfig
+from irchallenge.metrics import evaluate
+from irchallenge.paths import DATA_DIR, RESULTS_DIR
+from irchallenge.storage import load_corpus, load_qrels, load_queries, save_ranked_lists
+from irchallenge.text import clean_citation_markers, get_ta, tokenize_simple
 from rank_bm25 import BM25Okapi
 from tqdm.auto import tqdm
 
