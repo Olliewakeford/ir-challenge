@@ -1,12 +1,51 @@
 """Weighted Reciprocal Rank Fusion across retrieval signals.
 
-`weighted_rrf_fuse` is the single implementation used both by the pipeline's
-own Stage 1 fusion and by the standalone tuning scripts (run_refusion_v4.py,
-run_domain_boost_tune.py, run_new_signals.py, generate_submission_v4.py),
-which each used to carry their own copy of this loop.
+Two entry points, differing only in how they source weights and how they treat
+a zero weight. `weighted_rrf_fuse` takes weights explicitly, defaults a missing
+signal to 0.0 and skips it entirely; it is what the tuning scripts
+(run_refusion_v4.py, run_domain_boost_tune.py, run_new_signals.py,
+generate_submission_v4.py) call. `fuse_rrf` and `fuse_rrf_with_scores` read a
+PipelineConfig, default a missing signal to 1.0 and do not skip zero-weighted
+ones, which is what the pipeline's own Stage 1 expects.
+
+That difference is load-bearing, so the two behaviours are kept distinct. The
+scoring loop itself is shared via `_rrf_scores`.
 """
 from collections import defaultdict
 from itertools import product
+
+
+def _rrf_scores(all_retrievers: dict, weight_of, k: int, skip_zero: bool) -> dict:
+    """
+    Accumulate weighted RRF contributions across every signal.
+
+    weight_of: callable mapping a signal name to its weight.
+    skip_zero: when True, a zero-weighted signal contributes nothing at all.
+        When False it still contributes 0.0 to each doc it ranked, which keeps
+        those docs present in the score map even though they gain nothing.
+
+    Returns {qid: {doc_id: score}}.
+    """
+    all_qids = set()
+    for rl in all_retrievers.values():
+        all_qids.update(rl.keys())
+
+    per_query = {}
+    for qid in all_qids:
+        scores = defaultdict(float)
+        for name, ranked_lists in all_retrievers.items():
+            w = weight_of(name)
+            if skip_zero and w == 0:
+                continue
+            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
+                scores[doc_id] += w / (k + rank + 1)
+        per_query[qid] = scores
+    return per_query
+
+
+def _top_docs(scores: dict, limit: int) -> list:
+    """Docs sorted by descending score, truncated to `limit`."""
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]
 
 
 def weighted_rrf_fuse(all_retrievers: dict, weights: dict, k: int, top_n: int = 300) -> dict:
@@ -16,22 +55,13 @@ def weighted_rrf_fuse(all_retrievers: dict, weights: dict, k: int, top_n: int = 
 
     Returns {qid: [top_n doc_ids after weighted RRF]}.
     """
-    all_qids = set()
-    for rl in all_retrievers.values():
-        all_qids.update(rl.keys())
-
-    fused = {}
-    for qid in all_qids:
-        scores = defaultdict(float)
-        for name, ranked_lists in all_retrievers.items():
-            w = weights.get(name, 0.0)
-            if w == 0:
-                continue
-            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
-                scores[doc_id] += w / (k + rank + 1)
-        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        fused[qid] = [doc_id for doc_id, _ in sorted_docs[:top_n]]
-    return fused
+    per_query = _rrf_scores(
+        all_retrievers, lambda name: weights.get(name, 0.0), k, skip_zero=True
+    )
+    return {
+        qid: [doc_id for doc_id, _ in _top_docs(scores, top_n)]
+        for qid, scores in per_query.items()
+    }
 
 
 def fuse_rrf(all_retrievers: dict, config) -> dict:
@@ -39,19 +69,7 @@ def fuse_rrf(all_retrievers: dict, config) -> dict:
     print(f"\n  [RRF] Fusing {len(all_retrievers)} retrievers with k={config.rrf_k}")
     print(f"  Weights: {config.rrf_weights}")
 
-    all_qids = set()
-    for rl in all_retrievers.values():
-        all_qids.update(rl.keys())
-
-    fused = {}
-    for qid in all_qids:
-        scores = defaultdict(float)
-        for name, ranked_lists in all_retrievers.items():
-            w = config.rrf_weights.get(name, 1.0)
-            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
-                scores[doc_id] += w / (config.rrf_k + rank + 1)
-        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        fused[qid] = [doc_id for doc_id, _ in sorted_docs[:config.fusion_top_k]]
+    fused, _ = fuse_rrf_with_scores(all_retrievers, config)
 
     print(f"  [RRF] Fused -> {len(fused)} queries, top-{config.fusion_top_k} each")
     return fused
@@ -59,21 +77,19 @@ def fuse_rrf(all_retrievers: dict, config) -> dict:
 
 def fuse_rrf_with_scores(all_retrievers: dict, config) -> tuple:
     """RRF fusion that also returns per-doc scores for downstream use."""
-    all_qids = set()
-    for rl in all_retrievers.values():
-        all_qids.update(rl.keys())
+    per_query = _rrf_scores(
+        all_retrievers,
+        lambda name: config.rrf_weights.get(name, 1.0),
+        config.rrf_k,
+        skip_zero=False,
+    )
 
     fused = {}
     fused_scores = {}  # {qid: {doc_id: score}}
-    for qid in all_qids:
-        scores = defaultdict(float)
-        for name, ranked_lists in all_retrievers.items():
-            w = config.rrf_weights.get(name, 1.0)
-            for rank, doc_id in enumerate(ranked_lists.get(qid, [])):
-                scores[doc_id] += w / (config.rrf_k + rank + 1)
-        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        fused[qid] = [doc_id for doc_id, _ in sorted_docs[:config.fusion_top_k]]
-        fused_scores[qid] = dict(sorted_docs[:config.fusion_top_k])
+    for qid, scores in per_query.items():
+        top = _top_docs(scores, config.fusion_top_k)
+        fused[qid] = [doc_id for doc_id, _ in top]
+        fused_scores[qid] = dict(top)
 
     return fused, fused_scores
 
