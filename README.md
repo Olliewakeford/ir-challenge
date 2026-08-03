@@ -171,8 +171,7 @@ tests/
                                   boosting, filtering, text normalisation); none
                                   of it needs the course data, so it runs in CI
 submissions/
-  submission_v4_boost10.zip        final Codabench submission (v4 + 10x domain boost)
-  submission_v4_boost10_data.json  same submission, unzipped for inspection
+  submission_v4_boost10_data.json  final Codabench submission (v4 weights + 10x domain boost)
 docs/
   IR_challenge_presentation_WAKEFORD_BUSCH_AFAQ_RAZAVI.pdf   final presentation
 requirements.txt
