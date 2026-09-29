@@ -15,10 +15,17 @@ documents on average, drawn from 19 subject domains. The corpus is split into
 
 ## Result
 
-Final held-out NDCG@10: **0.6965**, second place on the course leaderboard
-(previous leader: 0.6725). This is a leaderboard for the course cohort, not a
-public IR benchmark. The ranking is only meaningful relative to the other
-teams taking the same course.
+The team's final submission scored **0.7494** NDCG@10 on the held-out
+queries, about 0.02 behind the top score on the leaderboard (0.7707). The
+leaderboard is public:
+[codabench.org/competitions/15308](https://www.codabench.org/competitions/15308/).
+It is a leaderboard for the course cohort, not a public IR benchmark.
+
+This repository holds the pipeline the team presented mid-competition (v4
+fusion plus the domain/venue boost, submitted 14 April 2026), which scored
+**0.6965** held out. The team kept submitting until the deadline, and the
+last-day work behind the 0.7494 submission is not in this repository. The
+approach, ablations and caveats below all describe the presented pipeline.
 
 ## Approach
 
@@ -41,11 +48,12 @@ the public query set's relevance judgments (`scripts/run_refusion_v4.py`).
 After fusion, candidates are rescored with two multiplicative boosts:
 same-domain candidates ×10, same-venue candidates ×2.
 
-The domain boost is the single largest contributor to the final score. It
-follows directly from a corpus property found during error analysis: of 736
-query-relevant document pairs, only 18 (2.4%) cross a domain boundary, so 97.6%
-of citations are same-domain. Applying the boost accounts for +0.1026 of the
-total +0.2104 NDCG@10 gain over the baseline (48.8%).
+The domain boost is the single largest contributor to the presented
+pipeline's score. It follows directly from a corpus property found during
+error analysis: of 736 query-relevant document pairs, only 18 (2.4%) cross a
+domain boundary, so 97.6% of citations are same-domain. Applying the boost adds about +0.10 NDCG@10
+(+0.1019 at the submitted 10x; +0.1026 at 26x, the best factor on the public
+queries), roughly half of the total gain over the baseline.
 
 ### Score progression (public queries, local evaluation)
 
@@ -67,9 +75,9 @@ total +0.2104 NDCG@10 gain over the baseline (48.8%).
 | MiniLM-L6-v2 | −0.0229 |
 | SPECTER2 | −0.0042 |
 
-BM25 full-text is the backbone signal by a wide margin. It also beat every
-dense retriever tried, including SPECTER2 (NDCG@10 0.4164 standalone) and
-SciNCL (0.4722 standalone). Lexical overlap on specific terms (method names,
+BM25 full-text is the backbone signal by a wide margin. In this pipeline it
+also beat every dense retriever, including SPECTER2 (NDCG@10 0.4164
+standalone) and SciNCL (0.4722 standalone). Lexical overlap on specific terms (method names,
 dataset names, model names) turned out to be a stronger citation signal than
 learned semantic similarity for this task.
 
@@ -97,7 +105,7 @@ made results worse, and understanding why constrained the rest of the design.
   overlap) that actually predict citation.
 - **Publication-year filter** (removing candidates published after the query
   paper, on the assumption a paper can't cite something written after it):
-  NDCG@10 dropped from 0.6151 to 0.3782. The assumption was wrong for this
+  NDCG@10 dropped from 0.5918 to 0.3782. The assumption was wrong for this
   dataset: 68.5% of documents marked as cited have a *later* publication year
   than the query paper (mean gap +4.3 years), most likely because the
   "citation" relation in this corpus reflects related/updated work rather
@@ -113,7 +121,7 @@ made results worse, and understanding why constrained the rest of the design.
 - The public qrels (the only relevance judgments available locally) were
   used both to build the pipeline and to tune the RRF weights and boost
   factors. That inflates the local NDCG@10 (0.71–0.72) relative to the
-  held-out leaderboard score (0.6965). Some of the gap is normal
+  held-out score of this pipeline (0.6965). Some of the gap is normal
   train/test variance, some is overfitting to the 100 public queries.
 - The domain boost factor (10x rather than a higher value that scored better
   locally) was deliberately chosen to be conservative, specifically to limit
@@ -157,7 +165,7 @@ scripts/
   run_new_signals.py               the signals added in the 7 and 8-way fusions
   run_refusion_v4.py          coordinate-descent weight tuning on public qrels (v4)
   run_domain_boost_tune.py    sweeps the domain/venue boost factors
-  generate_submission_v4.py   builds the final held-out submission (v4 weights + boost)
+  generate_submission_v4.py   builds the presented submission (v4 weights + boost)
 
   # the experiments in "What didn't work", kept so the claims can be rerun
   run_cross_encoder_as_signal.py   cross-encoder reranking (0.5918 -> 0.4762)
@@ -171,9 +179,9 @@ tests/
                                   boosting, filtering, text normalisation); none
                                   of it needs the course data, so it runs in CI
 submissions/
-  submission_v4_boost10_data.json  final Codabench submission (v4 weights + 10x domain boost)
+  submission_v4_boost10_data.json  presented Codabench submission, 14 April (v4 weights + 10x boost)
 docs/
-  IR_challenge_presentation_WAKEFORD_BUSCH_AFAQ_RAZAVI.pdf   final presentation
+  IR_challenge_presentation_WAKEFORD_BUSCH_AFAQ_RAZAVI.pdf   the team's presentation
 requirements.txt
 ```
 
